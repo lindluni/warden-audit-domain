@@ -1,0 +1,22 @@
+name: 'Domain Email Verification Enforcement'
+author: 'Brett Logan'
+description: 'Automates the auditing and notification of users who have not verified their email address.'
+inputs:
+  days:
+    description: The number of days between notifying the same user again
+    required: true
+    default: '14'
+  org:
+    description: The GitHub organization to audit
+    required: true
+    default: ${{ github.repository_owner }}
+  repo:
+    description: The repo to open issues in
+    required: true
+  token:
+    description: GitHub Admin PAT to open issues and comment
+    required: true
+    default: ${{ github.token }}
+runs:
+  using: node16
+  main: dist/index.js

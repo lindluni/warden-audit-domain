@@ -1,0 +1,28 @@
+{
+  "name": "warden-audit-domain",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Brett Logan",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "npm install && ./node_modules/.bin/ncc build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lindluni/warden-audit-domain.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lindluni/warden-audit-domain/issues"
+  },
+  "homepage": "https://github.com/lindluni/warden-audit-domain#readme",
+  "dependencies": {
+    "@actions/core": "^1.6.0",
+    "@octokit/graphql": "^4.8.0",
+    "@octokit/plugin-retry": "^3.0.9",
+    "@octokit/plugin-throttling": "^3.6.2",
+    "@octokit/rest": "^18.12.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.33.3"
+  }
+}
