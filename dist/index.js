@@ -10266,7 +10266,7 @@ async function newClient(token) {
     return new _Octokit(config)
 }
 
-const query = (/* unused pure expression or super */ null && (`query($org: String!, $page: String) {
+const query = `query($org: String!, $page: String) {
       organization(login: $org) {
         membersWithRole(first: 100, after: $page) {
           pageInfo {
@@ -10279,25 +10279,21 @@ const query = (/* unused pure expression or super */ null && (`query($org: Strin
           }
         }
       }
-    }`))
+    }`
 
 async function getOffendingUsers(client, org) {
-    // let hasNextPage = true
-    // let page = null
-    // const users = []
-    // while (hasNextPage) {
-    //     const response = await client.graphql(query, {
-    //         org: org,
-    //         page: page
-    //     })
-    //     users.push(...response.organization.membersWithRole.nodes)
-    //     page = response.organization.membersWithRole.pageInfo.endCursor
-    //     hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
-    // }
-    //
-    // await fs.writeFileSync('emails.json', JSON.stringify(users))
-    // read in json file
-    const users = JSON.parse(fs.readFileSync('emails.json', 'utf8'))
+    let hasNextPage = true
+    let page = null
+    const users = []
+    while (hasNextPage) {
+        const response = await client.graphql(query, {
+            org: org,
+            page: page
+        })
+        users.push(...response.organization.membersWithRole.nodes)
+        page = response.organization.membersWithRole.pageInfo.endCursor
+        hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
+    }
     // Filter those that have verified domain emails
     return users.filter((user) => user.organizationVerifiedDomainEmails.length === 0).map((user) => user.login)
 }
