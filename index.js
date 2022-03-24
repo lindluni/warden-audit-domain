@@ -1,5 +1,6 @@
 const fs = require('fs')
 const core = require('@actions/core')
+const handlebars = require('handlebars')
 const {Octokit} = require('@octokit/rest')
 const {retry} = require('@octokit/plugin-retry')
 const {throttling} = require('@octokit/plugin-throttling')
@@ -63,22 +64,7 @@ async function getOffendingUsers(client, org) {
     return users.filter((user) => user.organizationVerifiedDomainEmails.length === 0).map((user) => user.login)
 }
 
-async function openIssue(client, org, repo, user, days) {
-    const message = `
-This is a notice that you have yet to verify your organization email address on GitHub. The ${org} organization mandates that you verify your organization email address.
-
-Please verify your email address by navigating to the following link and adding and verifying your organization email address: https://github.com/settings/emails
-
-You will be notified every 14 days after this issue was opened that you are in violation of this policy.
-
-If this account is a bot account owned by your organization, please apply the \`bot-account\` label to this issue. And you will not receive any further notifications.
-
-Failure to verify your organization email address may result in your removal from the ${org} GitHub organization in the future.
-
-Thank you,
-
-${org} GitHub Support
-`
+async function openIssue(client, org, repo, user, days, message) {
     let issues
     try {
         console.log(`Searching for existing issue for ${user}`)
@@ -138,10 +124,11 @@ ${org} GitHub Support
     const org = core.getInput('org', {required: true, trimWhitespace: true})
     const repo = core.getInput('repo', {required: true, trimWhitespace: true})
     const token = core.getInput('token', {required: true, trimWhitespace: true})
-
+    const body = core.getInput('body', {required: true, trimWhitespace: true})
     const client = await newClient(token)
     const users = await getOffendingUsers(client, org)
     for (const user of users) {
-        await openIssue(client, org, repo, user, days)
+        const message = handlebars.compile(body)({org, repo, user})
+        await openIssue(client, org, repo, user, days, message)
     }
 })()

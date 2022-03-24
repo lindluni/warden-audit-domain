@@ -17,6 +17,23 @@ inputs:
     description: GitHub Admin PAT to open issues and comment
     required: true
     default: ${{ github.token }}
+  message:
+    description: The message to send to the user
+    required: true
+    default: |
+      This is a notice that you have yet to verify your organization email address on GitHub. The {{org}} organization mandates that you verify your organization email address.
+
+      Please verify your email address by navigating to the following link and adding and verifying your organization email address: https://github.com/settings/emails
+
+      You will be notified every 60 days after this issue was opened that you are in violation of this policy.
+
+      If this account is a bot account owned by your organization, please apply the \`bot-account\` label to this issue. And you will not receive any further notifications.
+
+      Failure to verify your organization email address may result in your removal from the {{org}} GitHub organization in the future.
+
+      Thank you,
+
+      {{org}} GitHub Support
 runs:
   using: node16
   main: dist/index.js
