@@ -124,7 +124,7 @@ async function openIssue(client, org, repo, user, days, message) {
     const org = core.getInput('org', {required: true, trimWhitespace: true})
     const repo = core.getInput('repo', {required: true, trimWhitespace: true})
     const token = core.getInput('token', {required: true, trimWhitespace: true})
-    const body = core.getInput('body', {required: true, trimWhitespace: true})
+    const body = core.getInput('message', {required: true, trimWhitespace: true})
     const client = await newClient(token)
     const users = await getOffendingUsers(client, org)
     for (const user of users) {
