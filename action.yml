@@ -2,10 +2,30 @@ name: 'Domain Email Verification Enforcement'
 author: 'Brett Logan'
 description: 'Automates the auditing and notification of users who have not verified their email address.'
 inputs:
+  action:
+    description: 'The action to perform. One of: "notify", "reconcile"'
+    required: true
+    default: 'notify'
   days:
     description: The number of days between notifying the same user again
     required: true
     default: '14'
+  message:
+    description: The message to send to the user
+    required: true
+    default: |
+      This is a notice that you have yet to verify your organization email address on GitHub. The {{org}} organization mandates that you verify your organization email address.
+      
+      Please verify your email address by navigating to the following link and adding and verifying your organization email address: https://github.com/settings/emails
+      
+      You will be notified every 60 days after this issue was opened that you are in violation of this policy.
+      
+      If this account is a bot account owned by your organization, please apply the \`bot-account\` label to this issue. And you will not receive any further notifications.
+      
+      Failure to verify your organization email address may result in your removal from the {{org}} GitHub organization in the future.
+      
+      Thank you,
+      {{org}} GitHub Support
   org:
     description: The GitHub organization to audit
     required: true

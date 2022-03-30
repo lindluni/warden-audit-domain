@@ -47,38 +47,32 @@ const query = `query($org: String!, $page: String) {
     }`
 
 async function getOffendingUsers(client, org) {
-    let hasNextPage = true
-    let page = null
-    const users = []
-    while (hasNextPage) {
-        const response = await client.graphql(query, {
-            org: org,
-            page: page
-        })
-        users.push(...response.organization.membersWithRole.nodes)
-        page = response.organization.membersWithRole.pageInfo.endCursor
-        hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
-    }
+    // let hasNextPage = true
+    // let page = null
+    // const users = []
+    //
+    // core.info(`Retrieving users for ${org}`)
+    // while (hasNextPage) {
+    //     const response = await client.graphql(query, {
+    //         org: org,
+    //         page: page
+    //     })
+    //     users.push(...response.organization.membersWithRole.nodes)
+    //     page = response.organization.membersWithRole.pageInfo.endCursor
+    //     hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
+    // }
     // Filter those that have verified domain emails
+    // await fs.writeFileSync('users.json', JSON.stringify(users))
+    const users = JSON.parse(fs.readFileSync('users.json', 'utf8'))
+    core.info(`Evaluating users without verified domain emails`)
     return users.filter((user) => user.organizationVerifiedDomainEmails.length === 0).map((user) => user.login)
 }
 
-async function openIssue(client, org, repo, user, days) {
-    const message = `
-This is a notice that you have yet to verify your organization email address on GitHub. The ${org} organization mandates that you verify your organization email address.
-
-Please verify your email address by navigating to the following link and adding and verifying your organization email address: https://github.com/settings/emails
-
-You will be notified every 14 days after this issue was opened that you are in violation of this policy.
-
-If this account is a bot account owned by your organization, please apply the \`bot-account\` label to this issue. And you will not receive any further notifications.
-
-Failure to verify your organization email address may result in your removal from the ${org} GitHub organization in the future.
-
-Thank you,
-
-${org} GitHub Support
-`
+async function processUser(client, org, repo, user, message) {
+    if (user !== 'lindluni') {
+        console.log(user)
+        return
+    }
     let issues
     try {
         console.log(`Searching for existing issue for ${user}`)
@@ -88,21 +82,20 @@ ${org} GitHub Support
             assignee: user,
             labels: ['compliance-unverified-email'],
             state: 'all',
+            sort: 'created',
+            direction: 'desc',
             per_page: 100
         })
 
         if (issues.length > 0) {
+            if (issues[0].labels.map(label => label.name).includes('bot-account')) {
+                core.info(`Bot account found, skipping: ${user}`)
+                return
+            }
             const date = new Date()
             const created = new Date(issues[0].created_at)
-            if (date.getTime() - created.getTime() > days * 24 * 60 * 60 * 1000) {
-                console.log(`Closing existing issue for ${user}`)
-                await client.issues.update({
-                    owner: org,
-                    repo: repo,
-                    issue_number: issues[0].number,
-                    state: 'closed'
-                })
-
+            // If it's been more than 60 days evaluate the issue for an exception or closure
+            if (date.getTime() - created.getTime() > 60 * 24 * 60 * 60 * 1000) {
                 console.log(`Opening issue for ${user}`)
                 await client.issues.create({
                     owner: org,
@@ -122,26 +115,173 @@ ${org} GitHub Support
                 repo: repo,
                 title: `Compliance: Unverified Email Address -- ${user}`,
                 assignees: [user],
-                body: message,
+                body: await generateMessage(org),
                 labels: ['compliance-unverified-email']
             })
         }
     } catch (err) {
-        console.log(err.message)
+        core.error(err.message)
     }
-
-
 }
 
+async function closeIssue(client, org, repo, issueNumber) {
+    try {
+        console.log(`Closing issue ${issueNumber}`)
+        await client.issues.update({
+            owner: org,
+            repo: repo,
+            issue_number: issueNumber,
+            state: 'closed'
+        })
+    } catch (err) {
+        core.error(err.message)
+    }
+}
+
+// Remove user from organization
+async function removeUser(client, org, user) {
+    core.info(`Removing user ${user} from ${org}`)
+    await client.orgs.removeMember({
+        org: org,
+        username: user
+    })
+}
+
+// Comment on issue
+async function comment(client, org, repo, issueNumber, user, message) {
+    core.info(`Commenting on issue ${issueNumber}`)
+    await client.issues.createComment({
+        owner: org,
+        repo: repo,
+        issue_number: issueNumber,
+        body: message
+    })
+}
+
+// Retrieves users who have been added in the last x days to the organization
+async function retrieveUsersFromAuditLog(client, org, days) {
+    try {
+        const date = new Date()
+        date.setDate(date.getDate() - days)
+        const phrase = `action:org.add_member created:>=${date.toISOString()}`
+
+        core.info(`Retrieving audit log for ${org}`)
+        const logs = await client.paginate('GET /orgs/{org}/audit-log', {
+            org: org,
+            phrase: phrase,
+            include: 'web',
+            per_page: 100
+        })
+        return logs.map(entry => entry.user)
+    } catch (err) {
+        core.setFailed(`Failed to retrieve audit log: ${err.message}`)
+        process.exit(1)
+    }
+}
+
+// Determines users who have not been added in the last x days to the organization and still don't have a valid email address
+async function intersect(newUsers, nonCompliantUsers) {
+    const violations = []
+    for (const user of nonCompliantUsers) {
+        if (!newUsers.includes(user)) {
+            violations.push(user)
+        }
+    }
+    return violations
+}
+
+async function retrieveIssues(client, org, repo) {
+    try {
+        core.info(`Retrieving issues for ${org}/${repo}`)
+        return await client.paginate(client.issues.listForRepo, {
+            owner: org,
+            repo: repo,
+            per_page: 100
+        })
+    } catch (err) {
+        core.setFailed(`Failed to retrieve issues: ${err.message}`)
+        process.exit(1)
+    }
+}
+
+async function validateEvent(client, org, repo, issueNumber) {
+    try {
+        core.info(`Retrieving events for ${org}/${repo}#${issueNumber}`)
+        const events = await client.paginate(client.issues.listEvents, {
+            owner: org,
+            repo: repo,
+            issue_number: issueNumber,
+            per_page: 100
+        })
+        for (const event of events) {
+            if (event.event === 'labeled') {
+                if (event.label.name === 'request-granted' && event.user.site_admin) {
+                    return true
+                }
+            }
+        }
+        return false
+    } catch (err) {
+        core.setFailed(`Failed to retrieve events: ${err.message}`)
+    }
+}
+
+async function processIssue(client, org, repo, issue) {
+    const labels = issue.labels.map(label => label.name)
+    if (labels.includes('request-granted')) {
+        try {
+            const validated = await validateEvent(client, org, repo, issue.number)
+            if (!validated) {
+                for (const assignee of issue.assignees) {
+                    if (!assignee.site_admin) {
+                        await removeUser(client, org, assignee.login)
+                        await comment(client, org, repo, issue.number, `${assignee.login} has been removed from the ${org} organization.`)
+                    }
+                }
+            } else {
+                await comment(client, org, repo, issue.number, `${assignee.login} has been granted an exemption.`)
+            }
+        } catch (err) {
+            core.error(`Failed to process issue ${issue.html_url}: ${err.message}`)
+        }
+    } else {
+        for (const assignee of issue.assignees) {
+            if (!assignee.site_admin) {
+                await removeUser(client, org, assignee.login)
+                await comment(client, org, repo, issue.number, `${assignee.login} has been removed from the ${org} organization.`)
+            }
+        }
+    }
+    await closeIssue(client, org, repo, issue.number)
+}
+
+
 (async function main() {
+    const action = core.getInput('action', {required: true, trimWhitespace: true})
     const days = parseInt(core.getInput('days', {required: true, trimWhitespace: true}))
+    const message = core.getInput('message', {required: true, trimWhitespace: true})
     const org = core.getInput('org', {required: true, trimWhitespace: true})
     const repo = core.getInput('repo', {required: true, trimWhitespace: true})
     const token = core.getInput('token', {required: true, trimWhitespace: true})
 
     const client = await newClient(token)
-    const users = await getOffendingUsers(client, org)
-    for (const user of users) {
-        await openIssue(client, org, repo, user, days)
+
+    if (action === 'notify') {
+        const exceptedUsers = await retrieveUsersFromAuditLog(client, org, days)
+        const nonCompliantUsers = await getOffendingUsers(client, org)
+        const violations = await intersect(exceptedUsers, nonCompliantUsers)
+        console.log(violations.length)
+        for (const user of violations.sort()) {
+            if (!user.includes('bot')) {
+                await processUser(client, org, repo, user, message)
+            } else {
+                console.log(`Skipping bot ${user}`)
+            }
+        }
+    } else if (action === 'reconcile') {
+        const issues = await retrieveIssues(client, org, repo)
+        for (const issue of issues) {
+            await processIssue(client, org, repo, issue)
+        }
     }
 })()
