@@ -10233,7 +10233,6 @@ module.exports = JSON.parse('[[[0,44],"disallowed_STD3_valid"],[[45,46],"valid"]
 var __webpack_exports__ = {};
 // This entry need to be wrapped in an IIFE because it need to be isolated against other modules in the chunk.
 (() => {
-const fs = __nccwpck_require__(7147)
 const core = __nccwpck_require__(2186)
 const {Octokit} = __nccwpck_require__(5375)
 const {retry} = __nccwpck_require__(6298)
@@ -10266,7 +10265,7 @@ async function newClient(token) {
     return new _Octokit(config)
 }
 
-const query = (/* unused pure expression or super */ null && (`query($org: String!, $page: String) {
+const query = `query($org: String!, $page: String) {
       organization(login: $org) {
         membersWithRole(first: 100, after: $page) {
           pageInfo {
@@ -10279,26 +10278,24 @@ const query = (/* unused pure expression or super */ null && (`query($org: Strin
           }
         }
       }
-    }`))
+    }`
 
 async function getOffendingUsers(client, org) {
-    // let hasNextPage = true
-    // let page = null
-    // const users = []
-    //
-    // core.info(`Retrieving users for ${org}`)
-    // while (hasNextPage) {
-    //     const response = await client.graphql(query, {
-    //         org: org,
-    //         page: page
-    //     })
-    //     users.push(...response.organization.membersWithRole.nodes)
-    //     page = response.organization.membersWithRole.pageInfo.endCursor
-    //     hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
-    // }
+    let hasNextPage = true
+    let page = null
+    const users = []
+
+    core.info(`Retrieving users for ${org}`)
+    while (hasNextPage) {
+        const response = await client.graphql(query, {
+            org: org,
+            page: page
+        })
+        users.push(...response.organization.membersWithRole.nodes)
+        page = response.organization.membersWithRole.pageInfo.endCursor
+        hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
+    }
     // Filter those that have verified domain emails
-    // await fs.writeFileSync('users.json', JSON.stringify(users))
-    const users = JSON.parse(fs.readFileSync('users.json', 'utf8'))
     core.info(`Evaluating users without verified domain emails`)
     return users.filter((user) => user.organizationVerifiedDomainEmails.length === 0).map((user) => user.login)
 }
@@ -10350,7 +10347,7 @@ async function processUser(client, org, repo, user, message) {
                 repo: repo,
                 title: `Compliance: Unverified Email Address -- ${user}`,
                 assignees: [user],
-                body: await generateMessage(org),
+                body: message,
                 labels: ['compliance-unverified-email']
             })
         }
@@ -10474,7 +10471,7 @@ async function processIssue(client, org, repo, issue) {
                     }
                 }
             } else {
-                await comment(client, org, repo, issue.number, `${assignee.login} has been granted an exemption.`)
+                await comment(client, org, repo, issue.number, `An exemption has been granted.`)
             }
         } catch (err) {
             core.error(`Failed to process issue ${issue.html_url}: ${err.message}`)

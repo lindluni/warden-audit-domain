@@ -1,4 +1,3 @@
-const fs = require('fs')
 const core = require('@actions/core')
 const {Octokit} = require('@octokit/rest')
 const {retry} = require('@octokit/plugin-retry')
@@ -47,23 +46,21 @@ const query = `query($org: String!, $page: String) {
     }`
 
 async function getOffendingUsers(client, org) {
-    // let hasNextPage = true
-    // let page = null
-    // const users = []
-    //
-    // core.info(`Retrieving users for ${org}`)
-    // while (hasNextPage) {
-    //     const response = await client.graphql(query, {
-    //         org: org,
-    //         page: page
-    //     })
-    //     users.push(...response.organization.membersWithRole.nodes)
-    //     page = response.organization.membersWithRole.pageInfo.endCursor
-    //     hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
-    // }
+    let hasNextPage = true
+    let page = null
+    const users = []
+
+    core.info(`Retrieving users for ${org}`)
+    while (hasNextPage) {
+        const response = await client.graphql(query, {
+            org: org,
+            page: page
+        })
+        users.push(...response.organization.membersWithRole.nodes)
+        page = response.organization.membersWithRole.pageInfo.endCursor
+        hasNextPage = response.organization.membersWithRole.pageInfo.hasNextPage
+    }
     // Filter those that have verified domain emails
-    // await fs.writeFileSync('users.json', JSON.stringify(users))
-    const users = JSON.parse(fs.readFileSync('users.json', 'utf8'))
     core.info(`Evaluating users without verified domain emails`)
     return users.filter((user) => user.organizationVerifiedDomainEmails.length === 0).map((user) => user.login)
 }
@@ -115,7 +112,7 @@ async function processUser(client, org, repo, user, message) {
                 repo: repo,
                 title: `Compliance: Unverified Email Address -- ${user}`,
                 assignees: [user],
-                body: await generateMessage(org),
+                body: message,
                 labels: ['compliance-unverified-email']
             })
         }
@@ -239,7 +236,7 @@ async function processIssue(client, org, repo, issue) {
                     }
                 }
             } else {
-                await comment(client, org, repo, issue.number, `${assignee.login} has been granted an exemption.`)
+                await comment(client, org, repo, issue.number, `An exemption has been granted.`)
             }
         } catch (err) {
             core.error(`Failed to process issue ${issue.html_url}: ${err.message}`)
