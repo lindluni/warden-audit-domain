@@ -10500,11 +10500,10 @@ async function processIssue(client, org, repo, issue) {
         const exceptedUsers = await retrieveUsersFromAuditLog(client, org, days)
         const nonCompliantUsers = await getOffendingUsers(client, org)
         const violations = await intersect(exceptedUsers, nonCompliantUsers)
-        console.log(violations.length)
+        console.log(`Found ${violations.length} violations`)
         for (const user of violations.sort()) {
             if (!user.includes('bot')) {
                 await processUser(client, org, repo, user, message)
-                process.exit(0)
             } else {
                 console.log(`Skipping bot ${user}`)
             }
