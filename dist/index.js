@@ -10301,33 +10301,43 @@ async function getOffendingUsers(client, org) {
 }
 
 async function processUser(client, org, repo, user, message) {
-    if (user !== 'lindluni') {
-        console.log(user)
-        return
-    }
-    let issues
-    try {
-        console.log(`Searching for existing issue for ${user}`)
-        issues = await client.paginate(client.issues.listForRepo, {
-            owner: org,
-            repo: repo,
-            assignee: user,
-            labels: ['compliance-unverified-email'],
-            state: 'all',
-            sort: 'created',
-            direction: 'desc',
-            per_page: 100
-        })
+    if (!user.site_admin) {
+        let issues
+        try {
+            console.log(`Searching for existing issue for ${user}`)
+            issues = await client.paginate(client.issues.listForRepo, {
+                owner: org,
+                repo: repo,
+                assignee: user,
+                labels: ['compliance-unverified-email'],
+                state: 'all',
+                sort: 'created',
+                direction: 'desc',
+                per_page: 100
+            })
 
-        if (issues.length > 0) {
-            if (issues[0].labels.map(label => label.name).includes('bot-account')) {
-                core.info(`Bot account found, skipping: ${user}`)
-                return
-            }
-            const date = new Date()
-            const created = new Date(issues[0].created_at)
-            // If it's been more than 60 days evaluate the issue for an exception or closure
-            if (date.getTime() - created.getTime() > 60 * 24 * 60 * 60 * 1000) {
+            if (issues.length > 0) {
+                if (issues[0].labels.map(label => label.name).includes('bot-account')) {
+                    core.info(`Bot account found, skipping: ${user}`)
+                    return
+                }
+                const date = new Date()
+                const created = new Date(issues[0].created_at)
+                // If it's been more than 60 days evaluate the issue for an exception or closure
+                if (date.getTime() - created.getTime() > 60 * 24 * 60 * 60 * 1000) {
+                    console.log(`Opening issue for ${user}`)
+                    await client.issues.create({
+                        owner: org,
+                        repo: repo,
+                        title: `Compliance: Unverified Email Address -- ${user}`,
+                        assignees: [user],
+                        body: message,
+                        labels: ['compliance-unverified-email']
+                    })
+                } else {
+                    console.log(`Existing issue not yet stale for ${user}`)
+                }
+            } else {
                 console.log(`Opening issue for ${user}`)
                 await client.issues.create({
                     owner: org,
@@ -10337,22 +10347,10 @@ async function processUser(client, org, repo, user, message) {
                     body: message,
                     labels: ['compliance-unverified-email']
                 })
-            } else {
-                console.log(`Existing issue not yet stale for ${user}`)
             }
-        } else {
-            console.log(`Opening issue for ${user}`)
-            await client.issues.create({
-                owner: org,
-                repo: repo,
-                title: `Compliance: Unverified Email Address -- ${user}`,
-                assignees: [user],
-                body: message,
-                labels: ['compliance-unverified-email']
-            })
+        } catch (err) {
+            core.error(err.message)
         }
-    } catch (err) {
-        core.error(err.message)
     }
 }
 
@@ -10506,6 +10504,7 @@ async function processIssue(client, org, repo, issue) {
         for (const user of violations.sort()) {
             if (!user.includes('bot')) {
                 await processUser(client, org, repo, user, message)
+                process.exit(0)
             } else {
                 console.log(`Skipping bot ${user}`)
             }
