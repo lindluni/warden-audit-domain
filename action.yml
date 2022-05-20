@@ -3,7 +3,7 @@ author: 'Brett Logan'
 description: 'Automates the auditing and notification of users who have not verified their email address.'
 inputs:
   action:
-    description: 'The action to perform. One of: "notify", "reconcile"'
+    description: 'The action to perform. One of: "notify", "reconcile", "audit"'
     required: true
     default: 'notify'
   days:
