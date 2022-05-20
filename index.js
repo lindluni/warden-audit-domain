@@ -178,7 +178,7 @@ async function retrieveUsersFromAuditLog(client, org, days) {
 async function intersect(newUsers, nonCompliantUsers) {
     const violations = []
     for (const user of nonCompliantUsers) {
-        if (!newUsers.includes(user)) {
+        if (!newUsers.includes(user) && !user.includes('-bot')) {
             violations.push(user)
         }
     }
@@ -267,6 +267,7 @@ async function processIssue(client, org, repo, issue) {
         const exceptedUsers = await retrieveUsersFromAuditLog(client, org, days)
         const nonCompliantUsers = await getOffendingUsers(client, org)
         const violations = await intersect(exceptedUsers, nonCompliantUsers)
+
         console.log(`Found ${violations.length} violations`)
         
         if (action === 'audit') {
@@ -274,11 +275,7 @@ async function processIssue(client, org, repo, issue) {
         }
 
         for (const user of violations.sort()) {
-            if (!user.includes('bot')) {
-                await processUser(client, org, repo, user, message)
-            } else {
-                console.log(`Skipping bot ${user}`)
-            }
+            await processUser(client, org, repo, user, message)
         }
     } else if (action === 'reconcile') {
         const issues = await retrieveIssues(client, org, repo)
