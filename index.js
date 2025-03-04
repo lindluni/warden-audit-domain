@@ -1,33 +1,10 @@
-const core = require('@actions/core')
-const {Octokit} = require('@octokit/rest')
-const {retry} = require('@octokit/plugin-retry')
-const {throttling} = require('@octokit/plugin-throttling')
-
-const _Octokit = Octokit.plugin(retry, throttling)
+import core from '@actions/core'
+import {Octokit} from 'octokit'
 
 async function newClient(token) {
-    const config = {
-        auth: token,
-        throttle: {
-            onRateLimit: (retryAfter, options, octokit) => {
-                octokit.log.warn(
-                    `Request quota exhausted for request ${options.method} ${options.url}`
-                );
-                if (options.request.retryCount <= 1) {
-                    octokit.log.info(`Retrying after ${retryAfter} seconds!`);
-                    return true;
-                }
-            },
-            onAbuseLimit: (retryAfter, options, octokit) => {
-                octokit.log.warn(`Abuse detected for request ${options.method} ${options.url}`);
-                if (options.request.retryCount === 0) {
-                    octokit.log.info(`Retrying after ${retryAfter} seconds!`);
-                    return true;
-                }
-            },
-        }
-    }
-    return new _Octokit(config)
+    return new Octokit({
+        auth: token
+    })
 }
 
 const query = `query($org: String!, $page: String) {
@@ -251,7 +228,7 @@ async function processIssue(client, org, repo, issue) {
 }
 
 
-(async function main() {
+async function main() {
     const action = core.getInput('action', {required: true, trimWhitespace: true})
     const days = parseInt(core.getInput('days', {required: true, trimWhitespace: true}))
     const message = core.getInput('message', {required: true, trimWhitespace: true})
@@ -283,4 +260,6 @@ async function processIssue(client, org, repo, issue) {
             await processIssue(client, org, repo, issue)
         }
     }
-})()
+}
+
+main()
